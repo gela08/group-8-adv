@@ -10,6 +10,7 @@ import {
 import { collection, getDocs, query, where, orderBy, limit } from 'firebase/firestore';
 import { db } from '@/firebase/firebase';
 import stylesCreate from '@/styles/stylesHome';
+import { useRouter } from 'expo-router'; // ✅ Import useRouter
 
 const styles = stylesCreate();
 
@@ -18,6 +19,8 @@ const BlogHomeContent = () => {
   const [popularBlogs, setPopularBlogs] = useState<any[]>([]);
   const [latestBlogs, setLatestBlogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const router = useRouter(); // ✅ Initialize router
 
   useEffect(() => {
     const fetchBlogs = async () => {
@@ -62,9 +65,21 @@ const BlogHomeContent = () => {
       <Text style={styles.sectionTitle}>📸 Featured</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         {featuredBlogs.map((blog) => (
-          <TouchableOpacity key={blog.id} style={styles.featuredCard}>
+          <TouchableOpacity
+            key={blog.id}
+            style={styles.featuredCard}
+            onPress={() =>
+              router.push({
+                pathname: '/read',
+                params: { postId: blog.id },
+              })
+            }
+          >
             <View style={styles.featuredImageWrapper}>
-              <Image source={{ uri: blog.image || 'https://via.placeholder.com/300x150.png' }} style={styles.featuredImage} />
+              <Image
+                source={{ uri: blog.image || 'https://via.placeholder.com/300x150.png' }}
+                style={styles.featuredImage}
+              />
               <Text style={styles.featuredText}>{blog.title}</Text>
             </View>
           </TouchableOpacity>
@@ -74,7 +89,16 @@ const BlogHomeContent = () => {
       {/* Popular Blogs */}
       <Text style={styles.sectionTitle}>🔥 Popular Blogs</Text>
       {popularBlogs.map((blog) => (
-        <TouchableOpacity key={blog.id} style={styles.blogCard}>
+        <TouchableOpacity
+          key={blog.id}
+          style={styles.blogCard}
+          onPress={() =>
+            router.push({
+              pathname: '/read',
+              params: { postId: blog.id },
+            })
+          }
+        >
           <Text style={styles.blogTitle}>{blog.title}</Text>
           <Text style={styles.blogSnippet}>{blog.snippet}</Text>
           <Text style={styles.blogMeta}>{blog.comments || 0} comments</Text>
@@ -84,7 +108,16 @@ const BlogHomeContent = () => {
       {/* Latest Blogs */}
       <Text style={styles.sectionTitle}>🕒 Latest Posts</Text>
       {latestBlogs.map((blog) => (
-        <TouchableOpacity key={blog.id} style={styles.latestCard}>
+        <TouchableOpacity
+          key={blog.id}
+          style={styles.latestCard}
+          onPress={() =>
+            router.push({
+              pathname: '/read',
+              params: { postId: blog.id },
+            })
+          }
+        >
           <Text style={styles.blogTitle}>{blog.title}</Text>
           <Text style={styles.blogSnippet}>{blog.snippet}</Text>
         </TouchableOpacity>

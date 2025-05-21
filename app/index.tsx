@@ -1,10 +1,10 @@
+//index.tsx
 import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
-  StyleSheet,
   Alert,
   SafeAreaView,
   ScrollView,
@@ -12,8 +12,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import stylesCreate from '@/styles/stylesLoginIndex';
-
-// import { useNavigation } from '@react-navigation/native'; // Uncomment if using React Navigation
+import { signIn } from '@/firebase/auth/auth_register'; // 👈 use your helper function
+import { useRouter } from 'expo-router';
 
 const styles = stylesCreate();
 
@@ -25,8 +25,9 @@ const LoginScreen: React.FC = () => {
 
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
+  const [accountError, setAccountError] = useState(''); // New state for account-related errors
 
-  // const navigation = useNavigation();
+  const router = useRouter();
 
   useEffect(() => {
     if (!email) {
@@ -46,36 +47,48 @@ const LoginScreen: React.FC = () => {
     }
   }, [password]);
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
+    setAccountError('');
+  
     if (!email || !password) {
       Alert.alert('Error', 'Please fill in all fields.');
       return;
     }
-
+  
     if (email.includes('@') && emailError) {
       Alert.alert('Error', 'Invalid email address.');
       return;
     }
-
+  
     if (passwordError) {
       Alert.alert('Error', 'Please correct the errors before logging in.');
       return;
     }
-
-    Alert.alert(
-      'Success',
-      `Logged in as ${email}\nRemember Me: ${rememberMe ? 'Yes' : 'No'}`
-    );
+  
+    try {
+      await signIn(email, password); // 🔥 uses your helper function!
+      Alert.alert('Success', `Welcome ${email}\nRemember Me: ${rememberMe ? 'Yes' : 'No'}`);
+      router.replace('/home');
+    } catch (error: any) {
+      console.error(error);
+  
+      if (error.code === 'auth/user-not-found') {
+        setAccountError('The email is not registered.');
+      } else if (error.code === 'auth/wrong-password') {
+        setAccountError('Incorrect password. Please try again.');
+      } else {
+        Alert.alert('Login Failed', error.message);
+      }
+    }
   };
+  
 
   const handleForgotPassword = () => {
-    // navigation.navigate('ForgotPassword');
     Alert.alert('Forgot Password', 'Redirect to forgot password screen.');
   };
 
   const handleGoToRegister = () => {
-    // navigation.navigate('Register');
-    Alert.alert('Register', 'Redirect to register screen.');
+    router.push('/register');
   };
 
   return (
@@ -83,7 +96,7 @@ const LoginScreen: React.FC = () => {
       <ScrollView contentContainerStyle={styles.container}>
         <Text style={styles.title}>Login</Text>
 
-        <Text style={styles.label}>Email or Username</Text>
+        <Text style={styles.label}>Email</Text>
         <TextInput
           style={[styles.input, { marginBottom: 10 }]}
           placeholder="Enter your email or username"
@@ -113,11 +126,11 @@ const LoginScreen: React.FC = () => {
             />
           </TouchableOpacity>
         </View>
-        {!!passwordError && (
-          <Text style={styles.errorText}>{passwordError}</Text>
-        )}
+        {!!passwordError && <Text style={styles.errorText}>{passwordError}</Text>}
 
-        {/* Remember Me */}
+        {/* Account Error */}
+        {!!accountError && <Text style={styles.errorText}>{accountError}</Text>}
+
         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 15 }}>
           <Switch
             value={rememberMe}

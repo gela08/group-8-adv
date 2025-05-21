@@ -2,6 +2,12 @@ import { StyleSheet } from 'react-native';
 
 export default function stylesCreate() {
   return StyleSheet.create({
+    errorText: {
+      color: "red",
+      fontSize: 10,
+      marginBottom: 10,
+      marginTop: 0,
+  },
     screen: {
       flex: 1,
     },
@@ -68,12 +74,6 @@ export default function stylesCreate() {
       color: '#fff',
       fontWeight: '700',
       fontSize: 16,
-    },
-    errorText: {
-      color: 'red',
-      fontSize: 10,
-      marginBottom: 10,
-      marginTop: 0,
     },
   });
 }

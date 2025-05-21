@@ -1,3 +1,5 @@
+// register.tsx
+
 import React, { useEffect, useState } from 'react';
 import {
   View,
@@ -11,6 +13,10 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import stylesCreate from '@/styles/stylesRegister';
+import { signUp } from '@/firebase/auth/auth_register'; // adjust the path as needed
+import { useRouter } from 'expo-router';
+
+
 
 const styles = stylesCreate();
 
@@ -28,6 +34,8 @@ const RegisterScreen: React.FC = () => {
   const [usernameError, setUsernameError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [passwordMatchError, setPasswordMatchError] = useState('');
+  const router = useRouter();
+
 
   const isPasswordMatch = () => {
     return password === confirmPassword;
@@ -70,7 +78,7 @@ const RegisterScreen: React.FC = () => {
     }
   }, [confirmPassword, password]);
 
-  const handleRegister = () => {
+  const handleRegister = async () => {
     if (!name || !username || !email || !password || !confirmPassword) {
       Alert.alert('Error', 'Please fill in all fields.');
       return;
@@ -83,8 +91,21 @@ const RegisterScreen: React.FC = () => {
       Alert.alert('Error', 'Please correct the errors before proceeding.');
       return;
     }
-    Alert.alert('Registered!', `Welcome, ${name}`);
-  };
+  
+    try {
+      await signUp(name, username, email, password);
+      Alert.alert('Success', `Account created for ${username}!`);
+      router.replace('/'); // Redirect to login
+    } catch (error: any) {
+      console.error('Registration error:', error);
+      const errorMsg =
+        error.code === 'auth/email-already-in-use'
+          ? 'This email is already registered.'
+          : error.message || 'Something went wrong. Try again.';
+  
+      Alert.alert('Registration Failed', errorMsg);
+    }
+  };  
 
   return (
     <SafeAreaView style={styles.screen}>

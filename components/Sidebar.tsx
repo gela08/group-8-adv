@@ -30,6 +30,9 @@ const Sidebar = ({ isVisible, selected, onSelect }) => {
         setCurrentPage('explore');
         Router.push('/explore');
         break;
+      case 'Read':
+        setCurrentPage('read');
+        break;
       case 'Notifications':
         setCurrentPage('notifications');
         Router.push('/notifications');

@@ -1,155 +1,223 @@
-import React, { useState } from "react";
+// read.tsx
+
+import React, { useState, useEffect } from 'react';
 import {
+  ScrollView,
   View,
   Text,
-  Image,
+  TextInput,
   TouchableOpacity,
   FlatList,
-  ScrollView,
-  TextInput,
+  Image,
   Alert,
-} from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import stylesCreate from "@/styles/stylesRead";
-import DropDownMenu from "@/components/dropDownMenu";
-import moment from "moment";
+} from 'react-native';
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  addDoc,
+  serverTimestamp,
+  doc,
+  getDoc,
+} from 'firebase/firestore';
+import { db, auth } from '@/firebase/firebase';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import moment from 'moment';
+import { Ionicons } from '@expo/vector-icons';
+import DropDownMenu from '@/components/dropDownMenu';
+import stylesCreate from '@/styles/stylesRead';
+import { deletePost, updatePost } from '@/firebase/crud/crud';
 
 const styles = stylesCreate();
-const isOwner = true; // <-- Replace with actual logic to check ownership
+
+type Comment = {
+  id?: string;
+  content: string;
+  postId: string;
+  userId: string;
+  username: string;
+  timestamp: any;
+};
 
 export default function BlogPostScreen() {
-  const [comments, setComments] = useState([
-    {
-      id: "1",
-      name: "Alex J.",
-      text: "This helped me a lot. Thanks!",
-      timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), // 2 hours ago
-    },
-    {
-      id: "2",
-      name: "Maria T.",
-      text: "Great post! I’d love to see more on this topic.",
-      timestamp: new Date(Date.now() - 26 * 60 * 60 * 1000).toISOString(), // 26 hours ago
-    },
-  ]);
-  const [commentText, setCommentText] = useState("");
+  const { postId } = useLocalSearchParams();
+  const [post, setPost] = useState<any>(null);
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [commentText, setCommentText] = useState('');
   const [menuVisible, setMenuVisible] = useState(false);
+  const user = auth.currentUser;
+  const router = useRouter();
 
-  const handleAddComment = () => {
-    if (commentText.trim()) {
-      setComments((prev) => [
-        ...prev,
-        {
-          id: Date.now().toString(),
-          name: "You",
-          text: commentText,
-          timestamp: new Date().toISOString(),
-        },
-      ]);
-      setCommentText("");
+  // Fetch the blog post
+  const fetchPost = async () => {
+    if (!postId) return;
+    try {
+      const postDoc = await getDoc(doc(db, 'posts', String(postId)));
+      if (postDoc.exists()) {
+        setPost({ id: postDoc.id, ...postDoc.data() });
+      }
+    } catch (error) {
+      console.error('Error fetching post:', error);
     }
   };
 
-  const handleMenuToggle = () => {
-    setMenuVisible((prev) => !prev);
+  // Fetch comments for the post
+  const fetchComments = async () => {
+    if (!postId) return;
+    try {
+      const q = query(collection(db, 'comments'), where('postId', '==', postId));
+      const snapshot = await getDocs(q);
+      const fetchedComments = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Comment[];
+
+      // Sort comments newest first
+      fetchedComments.sort((a, b) => {
+        const aTime = a.timestamp?.toDate?.() || new Date(0);
+        const bTime = b.timestamp?.toDate?.() || new Date(0);
+        return bTime.getTime() - aTime.getTime();
+      });
+
+      setComments(fetchedComments);
+    } catch (error) {
+      console.error('Error loading comments:', error);
+    }
   };
 
-  const handleArchive = () => {
-    console.log("Archived");
-    setMenuVisible(false);
+  const handleAddComment = async () => {
+    if (!user) {
+      console.log('User not logged in');
+      return;
+    }
+
+    if (!commentText.trim()) {
+      console.log('Comment cannot be empty');
+      return;
+    }
+
+    const newComment: Comment = {
+      content: commentText.trim(),
+      postId: String(postId),
+      userId: user.uid,
+      username: user.displayName || user.email || 'Unnamed',
+      timestamp: serverTimestamp(),
+    };
+
+    try {
+      await addDoc(collection(db, 'comments'), newComment);
+      setCommentText('');
+      fetchComments(); // Refresh
+    } catch (error) {
+      console.error('Error posting comment:', error);
+    }
   };
 
-  const handleDelete = () => {
-    console.log("Deleted");
-    setMenuVisible(false);
+  const formatRelativeTime = (timestamp: any) => {
+    if (!timestamp) return 'Just now';
+    try {
+      const date = timestamp.toDate ? timestamp.toDate() : timestamp;
+      return moment(date).fromNow();
+    } catch {
+      return 'Just now';
+    }
   };
 
-  const formatRelativeTime = (timestamp) => {
-    return moment(timestamp).fromNow();
+  const handleEdit = async () => {
+    if (!post) return;
+    try {
+      // Example: Append " (Edited)" to the title
+      await updatePost(post.id, { title: post.title + ' (Edited)' });
+      Alert.alert('Post Updated');
+      fetchPost(); // Refresh
+    } catch (error) {
+      console.error('Edit failed:', error);
+    }
   };
 
-  const formatExactTime = (timestamp) => {
-    return moment(timestamp).format("h:mm a, MM-DD-YY");
+  const handleDelete = async () => {
+    if (!post) return;
+    try {
+      await deletePost(post.id);
+      Alert.alert('Post Deleted');
+      router.back(); // Navigate back
+    } catch (error) {
+      console.error('Delete failed:', error);
+    }
   };
 
-  const isUnder24Hours = (timestamp) => {
-    return moment().diff(moment(timestamp), "hours") < 24;
-  };
+  useEffect(() => {
+    fetchPost();
+    fetchComments();
+  }, [postId]);
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <View style={{ position: "relative" }}>
+      <View style={{ position: 'relative' }}>
+        {/* Blog Post */}
         <View style={styles.postContainer}>
           <View style={styles.headerContainer}>
-            <Text style={styles.title}>Your Long Blog Post Title Goes Here</Text>
-            <TouchableOpacity style={styles.menuIcon} onPress={handleMenuToggle}>
+            <Text style={styles.title}>{post?.title || 'Blog Title'}</Text>
+            <TouchableOpacity
+              style={styles.menuIcon}
+              onPress={() => setMenuVisible(!menuVisible)}
+            >
               <Ionicons name="ellipsis-vertical" size={24} color="#000" />
             </TouchableOpacity>
           </View>
 
           <DropDownMenu
             visible={menuVisible}
-            onArchive={handleArchive}
+            onArchive={handleEdit}
             onDelete={handleDelete}
           />
 
           <View style={styles.imageContainer}>
             <Image
-              source={{
-                uri: "https://t3.ftcdn.net/jpg/02/36/99/22/360_F_236992283_sNOxCVQeFLd5pdqaKGh8DRGMZy7P4XKm.jpg",
-              }}
+              source={{ uri: post?.imageUri || 'https://via.placeholder.com/600x300.png' }}
               style={styles.image}
             />
-
-            <View style={styles.authorContainer}>
-              <Text style={styles.author}>Olivia Rhye</Text>
-              <View style={styles.tag}>
-                <Text style={styles.tagText}>Design</Text>
-              </View>
-            </View>
-            <Text style={styles.date}>1/20/2022</Text>
           </View>
 
-          <View style={styles.card}>
-            <Text style={styles.content}>
-              How do you create compelling presentations that wow your colleagues
-              and impress your managers? Look no further.
-            </Text>
-          </View>
+          <Text> By {post?.authorName || 'Unknown Author'}</Text>
+          <Text style={styles.content}>{post?.content || 'Loading post content...'}</Text>
         </View>
 
         {/* Comments Section */}
         <View style={styles.card}>
           <Text style={styles.commentHeader}>Comments</Text>
+
           <FlatList
             data={comments}
-            keyExtractor={(item) => item.id}
+            keyExtractor={(item) => item.id || item.content}
             renderItem={({ item }) => (
-              <TouchableOpacity
-                onLongPress={() => {
-                  if (isOwner && isUnder24Hours(item.timestamp)) {
-                    Alert.alert("Exact Time", formatExactTime(item.timestamp));
-                  }
-                }}
-              >
-                <View style={styles.comment}>
-                  <Text style={styles.commentAuthor}>{item.name}</Text>
-                  <Text style={styles.commentText}>{item.text}</Text>
-                  <Text style={styles.commentTime}>{formatRelativeTime(item.timestamp)}</Text>
-                </View>
-              </TouchableOpacity>
+              <View style={styles.comment}>
+                <Text style={styles.commentAuthor}>{item.username}</Text>
+                <Text style={styles.commentText}>{item.content}</Text>
+                <Text style={styles.commentTime}>{formatRelativeTime(item.timestamp)}</Text>
+              </View>
             )}
           />
-          <TextInput
-            style={styles.input}
-            placeholder="Write your comment..."
-            value={commentText}
-            onChangeText={setCommentText}
-            multiline
-          />
-          <TouchableOpacity style={styles.button} onPress={handleAddComment}>
-            <Text style={styles.buttonText}>Post Comment</Text>
-          </TouchableOpacity>
+
+          {user ? (
+            <>
+              <TextInput
+                style={styles.input}
+                placeholder="Write your comment..."
+                value={commentText}
+                onChangeText={setCommentText}
+                multiline
+              />
+              <TouchableOpacity style={styles.button} onPress={handleAddComment}>
+                <Text style={styles.buttonText}>Post Comment</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <Text style={{ padding: 10, fontStyle: 'italic' }}>
+              You must be logged in to comment.
+            </Text>
+          )}
         </View>
       </View>
     </ScrollView>

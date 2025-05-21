@@ -3,9 +3,9 @@ import { View, TouchableWithoutFeedback, StyleSheet } from 'react-native';
 import { Slot } from 'expo-router';
 
 // Firebase Initialization
-import '@/firebase/firebase'; // Adjust the path based on your project structure
+import '@/firebase/firebase';
 
-// Components & Styles
+// Components
 import Sidebar from '@/components/Sidebar';
 import Header from '@/components/Header';
 import Styles from '@/styles/styles';
@@ -22,31 +22,29 @@ export default function Layout() {
   return (
     <NavigationProvider>
       <View style={{ flex: 1, position: 'relative' }}>
-
-        {/* Sidebar and Backdrop Overlay */}
+        {/* Sidebar and Backdrop */}
         {isSidebarVisible && (
           <>
-            {/* Backdrop */}
             <TouchableWithoutFeedback onPress={closeSidebar}>
               <View style={overlayStyles.backdrop} />
             </TouchableWithoutFeedback>
 
-            {/* Sidebar */}
             <Sidebar
               isVisible={isSidebarVisible}
               selected={selectedSidebar}
-              onSelect={( label : string ) => {
+              onSelect={(label: string) => {
                 if (label === 'Close Menu') {
                   closeSidebar();
                 } else {
                   setSelectedSidebar(label);
+                  closeSidebar(); // Optionally close sidebar on navigation
                 }
               }}
             />
           </>
         )}
 
-        {/* Main Content */}
+        {/* Header + Slot Content */}
         <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
           <Header
             isSidebarVisible={isSidebarVisible}

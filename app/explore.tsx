@@ -1,7 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, FlatList, TouchableOpacity, Image } from 'react-native';
 import { useRouter } from 'expo-router';
+import { db } from '@/firebase/firebase';
+import { collection, getDocs, query, orderBy } from 'firebase/firestore';
 import Styles from '@/styles/stylesExplore';
+import { Post, Comment } from '@/firebase/crud/crud'; // ✅ import your types
+
+
 
 const styles = Styles();
 
@@ -9,47 +14,68 @@ const exploreTabs = [
   'Trending', 'Most Commented', 'Newest', 'Recommended',
 ];
 
-const explorePosts = [
-  {
-    id: 'e1',
-    title: 'Designing for accessibility',
-    image: 'https://via.placeholder.com/300x150.png?text=Accessibility',
-    snippet: 'Learn how to make your designs more inclusive and usable.',
-    author: 'Sam Park',
-    timestamp: new Date('2022-02-02'),
-    category: 'Design',
-    comments: 76,
-  },
-  {
-    id: 'e2',
-    title: 'How to lead async teams',
-    image: 'https://via.placeholder.com/300x150.png?text=Async+Teams',
-    snippet: 'Async doesn’t mean disconnected — lead with clarity.',
-    author: 'Alex Green',
-    timestamp: new Date('2022-02-01'),
-    category: 'Leadership',
-    comments: 54,
-  },
-];
-
-const popularComments = [
-  {
-    id: 'c1',
-    blogTitle: 'UX review presentations',
-    commenter: 'Taylor Brooks',
-    comment: 'This really helped me prepare for my pitch! 🎯',
-  },
-  {
-    id: 'c2',
-    blogTitle: 'Best books on scaling your startup',
-    commenter: 'Jordan Lee',
-    comment: '#2 on the list is a must-read 🔥',
-  },
-];
-
 const ExplorePage = () => {
   const [selectedTab, setSelectedTab] = useState('Trending');
+  const [explorePosts, setExplorePosts] = useState<Post[]>([]);
+  const [popularComments, setPopularComments] = useState<Comment[]>([]);
+  const [loadingPosts, setLoadingPosts] = useState(true);
+  const [loadingComments, setLoadingComments] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+
   const router = useRouter();
+
+  const fetchExplorePosts = async () => {
+    try {
+      const postsCollection = collection(db, 'posts');
+      const postsQuery = query(postsCollection, orderBy('createdAt', 'desc'));
+      const querySnapshot = await getDocs(postsQuery);
+
+      const postsData: Post[] = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...(doc.data() as Omit<Post, 'id'>),
+      }));
+
+      setExplorePosts(postsData);
+      setLoadingPosts(false);
+    } catch (error) {
+      console.error('Error fetching posts:', error);
+    }
+  };
+
+  const fetchPopularComments = async () => {
+    try {
+      const commentsCollection = collection(db, 'comments');
+      const commentsQuery = query(commentsCollection, orderBy('timestamp', 'desc'));
+      const querySnapshot = await getDocs(commentsQuery);
+
+      const commentsData: Comment[] = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...(doc.data() as Omit<Comment, 'id'>),
+      }));
+
+      setPopularComments(commentsData.slice(0, 5));
+      setLoadingComments(false);
+    } catch (error) {
+      console.error('Error fetching comments:', error);
+    }
+  };
+
+
+  const onRefresh = async () => {
+    try {
+      setRefreshing(true);
+      await fetchExplorePosts();
+      await fetchPopularComments();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchExplorePosts();
+    fetchPopularComments();
+  }, []);
 
   const renderTabs = () => (
     <View style={styles.categoryWrapper}>
@@ -71,38 +97,59 @@ const ExplorePage = () => {
     </View>
   );
 
-  const renderExploreItem = ({ item }) => (
+  const renderExploreItem = ({ item }: { item: Post }) => (
     <View style={styles.blogCard}>
       <View style={styles.imageContainer}>
-        <Image source={{ uri: item.image }} style={styles.image} />
+        <Image source={{ uri: item.photoUrl }} style={styles.image} />
         <View style={styles.overlay}>
           <View>
-            <Text style={styles.author}>{item.author}</Text>
-            <Text style={styles.date}>{item.timestamp.toLocaleDateString()}</Text>
+            <Text style={styles.author}>{item.authorName}</Text>
+            <Text style={styles.date}>
+              {item.createdAt?.toDate ? item.createdAt.toDate().toLocaleDateString() : ''}
+            </Text>
           </View>
           <Text style={styles.categoryBadge}>{item.category}</Text>
         </View>
       </View>
       <Text style={styles.title}>{item.title}</Text>
-      <Text style={styles.snippet}>{item.snippet}</Text>
+      <Text style={styles.snippet}>{item.content?.slice(0, 80)}...</Text>
       <Text style={styles.blogMeta}>{item.comments} comments</Text>
-      <TouchableOpacity onPress={() => router.push('/read')}>
-        <Text style={styles.readPost}>Read post →</Text>
+      <TouchableOpacity
+        onPress={() => {
+          if (!item.id) {
+            console.error('Item id is missing!');
+            return;
+          }
+          router.push({
+            pathname: '/read/[id]',
+            params: { id: item.id },
+          } as never);
+        }}
+      >
+        <Text style={styles.readPost}>Read post</Text>
       </TouchableOpacity>
+
+
+
     </View>
   );
+
 
   const renderPopularComments = () => (
     <View style={{ paddingHorizontal: 16, marginTop: 24 }}>
       <Text style={styles.sectionTitle}>💬 Popular Comments</Text>
-      {popularComments.map((comment) => (
-        <View key={comment.id} style={styles.commentCard}>
-          <Text style={styles.commentBlogTitle}>{comment.blogTitle}</Text>
-          <Text style={styles.commentText}>
-            <Text style={styles.commenter}>{comment.commenter}:</Text> {comment.comment}
-          </Text>
-        </View>
-      ))}
+      {loadingComments ? (
+        <Text style={{ paddingVertical: 10 }}>Loading comments...</Text>
+      ) : (
+        popularComments.map((comment) => (
+          <View key={comment.postId} style={styles.commentCard}>
+            <Text style={styles.commentBlogTitle}>{comment.postId}</Text>
+            <Text style={styles.commentText}>
+              <Text style={styles.commenter}>{comment.username}:</Text> {comment.content}
+            </Text>
+          </View>
+        ))
+      )}
     </View>
   );
 
@@ -110,13 +157,19 @@ const ExplorePage = () => {
     <ScrollView style={{ backgroundColor: '#f5f5f5' }}>
       {renderTabs()}
 
-      <FlatList
-        data={explorePosts}
-        renderItem={renderExploreItem}
-        keyExtractor={(item) => item.id}
-        scrollEnabled={false}
-        contentContainerStyle={{ padding: 16, paddingTop: 0 }}
-      />
+      {loadingPosts ? (
+        <Text style={{ padding: 20, textAlign: 'center' }}>Loading posts...</Text>
+      ) : (
+        <FlatList
+          data={explorePosts}
+          renderItem={renderExploreItem}
+          keyExtractor={(item) => item.id}
+          scrollEnabled={false}
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          contentContainerStyle={{ padding: 16, paddingTop: 0 }}
+        />
+      )}
 
       {renderPopularComments()}
     </ScrollView>

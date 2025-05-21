@@ -1,3 +1,5 @@
+//create.tsx
+
 import React, { useState } from 'react';
 import {
   View,
@@ -9,19 +11,23 @@ import {
   Image,
   Alert,
 } from 'react-native';
-import { launchImageLibrary } from 'react-native-image-picker';
-import { Ionicons } from '@expo/vector-icons';
 import { v4 as uuidv4 } from 'uuid';
-
 import stylesCreate from '@/styles/stylesCreate';
-import { db, storage } from '@/firebase/firebase'; // 👈 Import Firebase
-import { collection, addDoc, Timestamp } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { Timestamp } from 'firebase/firestore';
+import { uploadFullPost } from '@/firebase/crud/crud';
+import { auth } from '@/firebase/firebase';
 
-const categories = ['Design', 'Product', 'Development', 'Leadership', 'Customer Support'];
+const categories = [
+  'Food', 'Travel', 'Health', 'Fitness', 'Lifestyle', 'Fashion', 'Beauty',
+  'Technology', 'Education', 'Finance', 'Parenting', 'Entertainment', 'DIY',
+  'Personal Growth', 'Career', 'Home Decor', 'Relationships', 'Pets',
+  'Photography', 'Books'
+];
 
 const CreatePostScreen = () => {
   const styles = stylesCreate();
+
+  const [postTitle, setPostTitle] = useState('');
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [postText, setPostText] = useState('');
@@ -29,47 +35,55 @@ const CreatePostScreen = () => {
 
   const toggleCategory = (category: string) => {
     setSelectedCategories(prev =>
-      prev.includes(category) ? prev.filter(c => c !== category) : [...prev, category]
+      prev.includes(category)
+        ? prev.filter(c => c !== category)
+        : [...prev, category]
     );
   };
 
-  const pickImage = () => {
-    launchImageLibrary({ mediaType: 'photo' }, (response) => {
-      if (response.didCancel || response.errorCode) return;
-      const uri = response.assets?.[0]?.uri;
-      if (uri) setImageUri(uri);
-    });
-  };
-
   const handleSubmit = async () => {
+    if (!postTitle.trim()) {
+      Alert.alert('Missing title', 'Please enter a title for your post.');
+      return;
+    }
+
     if (!postText.trim()) {
       Alert.alert('Missing content', 'Please write something for your post.');
+      return;
+    }
+
+    if (!imageUri?.startsWith('http')) {
+      Alert.alert('Invalid Image', 'Please enter a valid image URL.');
       return;
     }
 
     setLoading(true);
 
     try {
-      let imageUrl: string | null = null;
-
-      // Upload image if present
-      if (imageUri) {
-        const response = await fetch(imageUri);
-        const blob = await response.blob();
-        const imageRef = ref(storage, `postImages/${uuidv4()}`);
-        await uploadBytes(imageRef, blob);
-        imageUrl = await getDownloadURL(imageRef);
+      const user = auth.currentUser;
+      if (!user) {
+        Alert.alert('Not Logged In', 'Please log in to create a post.');
+        return;
       }
 
-      // Add post to Firestore
-      await addDoc(collection(db, 'posts'), {
-        text: postText,
-        categories: selectedCategories,
-        imageUrl,
+      const newPost = {
+        id: uuidv4(),
+        title: postTitle.trim(),
+        content: postText.trim(),
+        category: selectedCategories[0] || 'Uncategorized',
+        authorName: user.displayName || 'Guest User',
+        userId: user.uid,
+        comments: '',
+        photoUrl: '',
+        imageUri,
         createdAt: Timestamp.now(),
-      });
+        updatedAt: Timestamp.now(),
+      };
+
+      await uploadFullPost(newPost);
 
       Alert.alert('Post Created', 'Your blog post has been successfully submitted!');
+      setPostTitle('');
       setPostText('');
       setSelectedCategories([]);
       setImageUri(null);
@@ -84,61 +98,68 @@ const CreatePostScreen = () => {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
-
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.headerText}>Create Post</Text>
         </View>
 
-        {/* Post & Categories */}
-        <View style={styles.postCateg}>
+        {/* Title Input */}
+        <TextInput
+          placeholder="Enter your blog post title..."
+          value={postTitle}
+          onChangeText={setPostTitle}
+          style={styles.titleInput}
+          placeholderTextColor="#999"
+        />
 
-          {/* Upload Image Button */}
-          <TouchableOpacity style={styles.imageUploadButton} onPress={pickImage}>
-            <Ionicons name="image-outline" size={20} color="#007BFF" />
-            <Text style={styles.imageUploadText}>Upload Image</Text>
-          </TouchableOpacity>
+        {/* Image URL Input */}
+        <TextInput
+          placeholder="Enter image URL (https://...)"
+          value={imageUri || ''}
+          onChangeText={setImageUri}
+          style={styles.titleInput}
+          placeholderTextColor="#999"
+        />
 
-          {/* Image Preview */}
-          {imageUri && (
-            <Image source={{ uri: imageUri }} style={styles.previewImage} />
-          )}
+        {/* Image Preview */}
+        {imageUri && (
+          <Image source={{ uri: imageUri }} style={styles.previewImage} />
+        )}
 
-          {/* Post Input */}
-          <TextInput
-            placeholder="Write your post here..."
-            multiline
-            value={postText}
-            onChangeText={setPostText}
-            style={styles.textInput}
-            placeholderTextColor="#999"
-          />
+        {/* Content Input */}
+        <TextInput
+          placeholder="Write your post content here..."
+          multiline
+          value={postText}
+          onChangeText={setPostText}
+          style={styles.textInput}
+          placeholderTextColor="#999"
+        />
 
-          {/* Categories Selection */}
-          <View style={styles.categoriesBox}>
-            <Text style={styles.categoriesTitle}>Categories</Text>
-            <View style={styles.categoriesBox2}>
-              <View style={styles.categoriesWrap}>
-                {categories.map((category) => (
-                  <TouchableOpacity
-                    key={category}
+        {/* Categories */}
+        <View style={styles.categoriesBox}>
+          <Text style={styles.categoriesTitle}>Categories</Text>
+          <View style={styles.categoriesBox2}>
+            <View style={styles.categoriesWrap}>
+              {categories.map((category) => (
+                <TouchableOpacity
+                  key={category}
+                  style={[
+                    styles.categoryChip,
+                    selectedCategories.includes(category) && styles.categoryChipSelected,
+                  ]}
+                  onPress={() => toggleCategory(category)}
+                >
+                  <Text
                     style={[
-                      styles.categoryChip,
-                      selectedCategories.includes(category) && styles.categoryChipSelected,
+                      styles.categoryText,
+                      selectedCategories.includes(category) && styles.categoryTextSelected,
                     ]}
-                    onPress={() => toggleCategory(category)}
                   >
-                    <Text
-                      style={[
-                        styles.categoryText,
-                        selectedCategories.includes(category) && styles.categoryTextSelected,
-                      ]}
-                    >
-                      {category}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+                    {category}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
           </View>
         </View>
@@ -149,7 +170,9 @@ const CreatePostScreen = () => {
           onPress={handleSubmit}
           disabled={loading}
         >
-          <Text style={styles.submitText}>{loading ? 'Submitting...' : 'Submit'}</Text>
+          <Text style={styles.submitText}>
+            {loading ? 'Submitting...' : 'Submit'}
+          </Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
